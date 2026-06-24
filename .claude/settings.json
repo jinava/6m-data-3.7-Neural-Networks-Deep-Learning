@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat)",
+      "Bash(python3 /tmp/dump.py 01_monday_morning.ipynb)",
+      "Bash(python3 /tmp/dump.py 02_perceptron_to_mlp.ipynb)",
+      "Bash(python3 /tmp/dump.py 03_gradient_descent.ipynb)",
+      "Bash(python3 /tmp/dump.py 04_pytorch_training_loop.ipynb)",
+      "Bash(python3 -c ' *)",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(set -e)",
+      "Bash(git push *)",
+      "Bash(git merge *)",
+      "Bash(git fetch *)",
+      "Bash(git rebase *)",
+      "Bash(python3 -c *)",
+      "Bash(git branch *)",
+      "Bash(git ls-remote *)",
+      "Bash(git remote *)",
+      "Bash(awk '/ *)",
+      "Bash(cd /home/jinava/dsai3f/6m-data-3.7-Neural-Networks-Deep-Learning *)",
+      "Bash(python3 /tmp/rebuild.py)",
+      "Bash(cd /home/jinava/docs *)",
+      "Read(//home/jinava/docs/**)"
+    ],
+    "additionalDirectories": [
+      "/tmp",
+      "/home/jinava/docs"
+    ]
+  }
+}
