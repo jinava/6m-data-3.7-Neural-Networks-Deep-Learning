@@ -23,7 +23,10 @@
       "Bash(cd /home/jinava/dsai3f/6m-data-3.7-Neural-Networks-Deep-Learning *)",
       "Bash(python3 /tmp/rebuild.py)",
       "Bash(cd /home/jinava/docs *)",
-      "Read(//home/jinava/docs/**)"
+      "Read(//home/jinava/docs/**)",
+      "WebFetch(domain:cs231n.github.io)",
+      "WebSearch",
+      "WebFetch(domain:docs.pytorch.org)"
     ],
     "additionalDirectories": [
       "/tmp",
