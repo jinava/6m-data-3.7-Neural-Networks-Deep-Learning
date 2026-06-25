@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bias in Neural Networks — L07 Reference</title>
+<style>
+:root{--ink:#1a2233;--mut:#5b6677;--bg:#fff;--soft:#f5f7fa;--line:#e2e7ee;--accent:#2456b3;--green:#1a7f37;--code:#0b1020;}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.65 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+.wrap{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:260px 1fr;gap:0}
+nav{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;padding:28px 20px;border-right:1px solid var(--line);background:var(--soft)}
+nav h1{font-size:15px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);margin:0 0 14px}
+nav ul{list-style:none;margin:0;padding:0}
+nav li{margin:6px 0}
+nav a{color:var(--ink);text-decoration:none;font-size:14px}
+nav a:hover{color:var(--accent);text-decoration:underline}
+main{padding:38px 48px;min-width:0}
+header.top{border-bottom:2px solid var(--line);margin-bottom:8px;padding-bottom:14px}
+header.top h1{font-size:30px;margin:0 0 6px}
+.byline{color:var(--green);font-weight:600;font-size:14px}
+.sub{color:var(--mut);font-size:14px;margin-top:4px}
+section{padding:22px 0;border-bottom:1px solid var(--line)}
+h2{font-size:22px;color:var(--accent);margin:.2em 0 .6em}
+h3{font-size:17px;margin:1.2em 0 .4em}
+p{margin:.6em 0}
+code{background:var(--soft);padding:.1em .35em;border-radius:4px;font:13.5px/1.5 "SF Mono",Menlo,Consolas,monospace}
+pre{background:var(--code);color:#e6edf3;padding:14px 16px;border-radius:8px;overflow:auto}
+pre code{background:none;color:inherit;padding:0;font-size:13px}
+table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:14.5px}
+th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
+th{background:var(--soft)}
+span[style*="green"]{color:var(--green)!important}
+em{color:var(--mut)}
+@media(max-width:820px){.wrap{grid-template-columns:1fr}nav{position:static;height:auto;border-right:none;border-bottom:1px solid var(--line)}main{padding:24px}}
+</style></head>
+<body><div class="wrap">
+<nav><h1>Contents</h1><ul><li><a href="#s1a">1a · The deep version — "Bias, harder"</a></li>
+<li><a href="#s1b">1b · The plain-English story</a></li>
+<li><a href="#s1c">1c · Technical note (engineering brief, v2)</a></li>
+<li><a href="#s2">2 · How bias is handled in the code (cross-notebook survey)</a></li>
+<li><a href="#s3">3 · What to take care of — and the correct fixes</a></li>
+<li><a href="#s4">References (official)</a></li></ul>
+<p style="margin-top:24px;font-size:12.5px;color:var(--mut)">Source notebooks:<br>L07 Neural Networks &amp; Deep Learning</p></nav>
+<main>
+<header class="top"><h1>Bias in Neural Networks</h1>
+<div class="byline">A complete reference — authored by [Opus 4.8]</div>
+<div class="sub">Three explanations (deep / story / engineering) · how bias is handled in the L07 code · what to take care of. Moved here from <code>notebooks/03_gradient_descent.ipynb</code>.</div></header>
+<section id="s1a"><h2>1a · The deep version — "Bias, harder"</h2><p><strong>The deepest truth: bias is what makes a layer <em>affine</em>, not <em>linear</em> — and affine is the whole game.</strong> A linear map obeys one ironclad rule: <code>f(0) = 0</code>. Compose linear maps and they keep fixing the origin. The part people miss: this stays true <em>even with nonlinearities, if there are no biases</em> — a ReLU/tanh network with every bias removed satisfies <code>N(0) = 0</code> at every depth (because <code>f(0) = 0</code>). It literally cannot output anything but zero from the zero vector. The nonlinearity gives you <strong>bending</strong> (the XOR story); the <strong>bias gives you placement</strong>. Algebraically a neuron applies an <em>affine</em> map then a nonlinearity, and the affine group splits into a linear part (the weight matrix — rotation/scale/shear) and a <strong>translation</strong> (the bias). Weights rotate; <strong>bias translates</strong>.</p>
+<p><strong>The crown jewel: in log-odds space, bias <em>is</em> the prior.</strong> Logistic regression (= one perceptron) computes <code>log( P(y=1|x) / P(y=0|x) ) = b + w·x</code>. Here <code>w·x</code> is the <strong>evidence</strong> (the log-likelihood-ratio from the features) and <code>b</code> is the <strong>log prior odds</strong> — what you'd believe <em>before seeing any feature</em>. So <code>z = w·x + b</code> is exactly <strong>posterior log-odds = prior + evidence</strong>, and the sigmoid just converts back to a probability. That is why the correct output bias on an imbalanced task is <code>log(p/(1−p))</code> for base rate <code>p</code>. Deep nets are not doing literal Bayes per neuron, but the structure carries: <strong>bias is each unit's standing lean before its inputs vote.</strong></p>
+<p><strong>The insight with teeth: bias is the life-support of a ReLU unit.</strong> A ReLU neuron is <code>max(0, w·x + b)</code>. Whether <em>any</em> gradient flows back through it depends on whether <code>w·x + b &gt; 0</code>, and <strong>bias is the dial that sets that.</strong> Strongly negative bias → the unit is silent on nearly every input → output 0, gradient 0, no learning → a <strong>dead neuron</strong>. This is why a known init for deep ReLU nets sets biases to a small positive constant (≈0.01) rather than 0.</p>
+<p><strong>Why bias secretly couples to your data's mean.</strong> If inputs are not centered, bias and weights become coupled in the loss landscape (nudging a weight shifts the mean pre-activation, which the bias must chase) — worse conditioning, slower training. <strong>BatchNorm's learnable shift <code>β</code> is just a bias relocated to <em>after</em> the normalization</strong> — which is why you use <code>bias=False</code> on the layer before a BatchNorm: the norm already subtracts the mean and re-adds its own offset.</p>
+<p><strong>Unifying one-liner:</strong> across affine geometry, Bayesian priors, ReLU survival, and optimization conditioning, bias is <strong>the one parameter that never touches the input.</strong> Weights answer <em>"how do I revise my answer given evidence?"</em>; bias answers <em>"what is my answer with no evidence?"</em> — the network's <strong>anchor / prior / floor / translation</strong>, all at once.</p></section>
+<section id="s1b"><h2>1b · The plain-English story</h2><p>Picture a tiny <strong>gatekeeper</strong> at a door whose whole job is to answer "Yes or no?" — will this customer check out? People walk up and hand her <strong>clues</strong> ("the cart has 3 items", "they're a returning customer"). How much she trusts each clue is the <strong>weights</strong>.</p>
+<p>But before a single person shows up, she already has a <strong>mood — a default lean.</strong> Maybe she is an <strong>optimist</strong> who assumes "yes" unless given a reason to doubt; maybe a <strong>skeptic</strong> who assumes "no" until truly convinced. That starting lean — her answer when the room is empty — is the <strong>bias</strong>.</p>
+<p>Why does she need one? A gatekeeper forced to start perfectly neutral every time could never say <em>"around here most people actually DO buy, so I'll lean yes."</em> The real world is not centered on zero — most emails are not spam, most visitors do not buy. <strong>Bias lets her hold a sensible default that matches how the world really leans.</strong> A nice way to feel it: bias is the <strong>bar you have to clear</strong> — a skeptic sets it high (you need a mountain of good clues), an optimist sets it low.</p>
+<p>Where did her lean come from? Nobody handed her the perfect attitude. She started with a near-blank one (the system gives a small random/zero starting mood), then <strong>learned it on the job</strong> — every wrong answer nudged it — until it settled into the honest base rate of the place. <strong>You did not set it; the data taught her.</strong></p>
+<p>And the deepest part: on the day the clues stop coming — every input zero — what is left? <strong>Only her lean.</strong> Bias is the part of her judgment that does not depend on anyone walking through the door.</p>
+<p><strong>In one breath:</strong> weights = what the neuron learns <em>from the world</em>; bias = what it believes <em>before the world speaks</em>. Both are learned, but only bias survives the silence. A deep network is just <strong>millions of these gatekeepers stacked in layers</strong>, each carrying its own quiet bias.</p></section>
+<section id="s1c"><h2>1c · Technical note (engineering brief, v2)</h2><p><strong>Summary.</strong> A standard neuron computes <strong><code>output = f( (inputs · weights) + bias )</code></strong>. The inner part <code>z = (inputs · weights) + bias</code> is the <strong>pre-activation</strong>; the <strong>activation <code>f</code></strong> then produces the output. Weights scale each input; <strong>bias is one learned scalar per neuron</strong> that sets its baseline before the inputs are weighed. Bias is learned from data (not configured) and is optional (sometimes switched off).</p>
+<p><strong>1. One neuron.</strong> <code>z = (x₁·w₁ + … + xₙ·wₙ) + b</code> (a <em>scalar</em>); <code>output = f(z)</code>. If all inputs are 0, <code>z = b</code> and the output is <code>f(b)</code> — bias is the neuron's baseline before any input. Same role as the intercept in <code>y = mx + b</code>.</p>
+<p><strong>2. One neuron vs a layer (scalar vs vector).</strong> A layer of N neurons computes <code>z = W·x + b</code> (PyTorch: <code>y = xAᵀ + b</code>):</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>one neuron</th>
+<th>layer of N neurons</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>weighted sum <code>z</code></td>
+<td>scalar</td>
+<td>vector (length N)</td>
+</tr>
+<tr>
+<td>bias <code>b</code></td>
+<td>scalar</td>
+<td><strong>vector (N — one per neuron)</strong></td>
+</tr>
+<tr>
+<td>weights</td>
+<td>row of n</td>
+<td>matrix N×n</td>
+</tr>
+</tbody>
+</table>
+<p>A layer does not have "a bias" — it has <strong>one bias per neuron</strong>, stored as a vector (PyTorch <code>bias</code> shape <code>(out_features,)</code>; scikit-learn <code>intercepts_[i]</code>).</p>
+<p><strong>3. Why it exists.</strong> (a) Removes the "boundary must pass through 0" constraint — without bias a neuron cannot even learn "flag when value &gt; 5". (b) Lets each neuron match a real-world baseline (most emails are not spam). (c) It is the network's intercept. <em>Intuition: weights say how to react to evidence; bias says what to assume before any evidence.</em></p>
+<p><strong>4. Lifecycle &amp; range.</strong> No fixed default value: <strong>you</strong> choose only whether it exists (<code>bias=True/False</code>); <strong>the framework</strong> sets the initial number (PyTorch: <code>±1/√(in_features)</code>; from-scratch: often 0); <strong>training</strong> learns the final value from data. Range: bounded at init, any real number afterwards.</p>
+<p><strong>5. Operational notes.</strong> Dead ReLU units come from too-negative bias (init near 0 / slightly positive). Output-layer bias ≈ base rate — init to <code>log(p/(1−p))</code> on imbalanced data. <strong>BatchNorm makes bias redundant → <code>bias=False</code> before it.</strong> Bias is normally excluded from weight decay.</p>
+<p><strong>References (official, verified):</strong> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html"><code>nn.Linear</code></a> (<code>y = xAᵀ + b</code>, bias <code>(out_features,)</code>, init <code>±1/√(in_features)</code>) · <a href="https://scikit-learn.org/stable/modules/generated/sklearn.neural_network.MLPClassifier.html"><code>MLPClassifier.intercepts_</code></a> · <a href="https://cs231n.github.io/neural-networks-1/">CS231n neuron model</a></p></section>
+<section id="s2"><h2>2 · How bias is handled in the code (cross-notebook survey)</h2><p>The L07 notebooks handle bias <strong>three</strong> different ways. Everything below maps to real cells.</p>
+<table>
+<thead>
+<tr>
+<th>Regime</th>
+<th>Where</th>
+<th>Who manages bias</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>scikit-learn</strong> (<code>LogisticRegression</code>, <code>MLPClassifier</code>)</td>
+<td>nb01, nb02, nb04</td>
+<td>hidden in the estimator (<code>intercept_</code> / <code>intercepts_</code>)</td>
+</tr>
+<tr>
+<td><strong>PyTorch <code>nn.Linear</code></strong> (and <code>nn.Sequential</code>)</td>
+<td>nb03, nb04, assignment, optional</td>
+<td>auto-created tensor, framework-initialised, optimiser-learned</td>
+</tr>
+<tr>
+<td><strong>Hand-rolled NumPy</strong></td>
+<td>optional_extensions §1</td>
+<td>you declare, init, differentiate and update it yourself</td>
+</tr>
+</tbody>
+</table>
+<h3>1. Defined / created</h3>
+<ul>
+<li><strong>PyTorch <code>nn.Linear(in, out)</code></strong> auto-creates a <code>bias</code> tensor of shape <code>(out,)</code> because the default is <code>bias=True</code>. nb03 <code>SimpleMLP</code> → biases <code>16+1 = 17</code> of <code>177</code> params; nb04 <code>MLP</code> → <code>32+32+1 = 65</code> of <code>1,409</code>.</li>
+<li><strong>sklearn <code>MLPClassifier</code></strong> stores biases in <code>model.intercepts_</code> (one vector per layer); no off-switch.</li>
+<li><strong>sklearn <code>LogisticRegression</code></strong>: bias = <code>intercept_</code>, governed by <code>fit_intercept=True</code>.</li>
+<li><strong>NumPy from scratch</strong>: you declare it — <code>b1 = np.zeros(hidden)</code>, <code>b2 = np.zeros(1)</code>.</li>
+</ul>
+<h3>2. Initial value assigned</h3>
+<ul>
+<li><strong>Framework default:</strong> PyTorch <code>nn.Linear</code> seeds each bias from <code>U(−√k, √k)</code>, <code>k = 1/in_features</code> (≈ <code>±1/√(in_features)</code>) — small random, <strong>not zero</strong>.</li>
+<li><strong>Explicit:</strong> the NumPy net uses <code>np.zeros</code>; the weight-init demo (optional §2) calls <code>nn.init.zeros_(m.bias)</code>. Zero-init is safe for <strong>bias</strong> but the all-zeros <strong>weight</strong> init is broken.</li>
+</ul>
+<h3>3. Forward formula</h3>
+<ul>
+<li>One neuron: <code>z = (Σ xᵢ·wᵢ) + b</code> (scalar); <code>output = f(z)</code>.</li>
+<li>Layer, matrix form — exactly as the NumPy net codes it: <code>z1 = X @ W1 + b1</code>. <code>X@W1</code> is <code>(N, hidden)</code>, <code>b1</code> is <code>(hidden,)</code>, and <strong>broadcasting adds the same bias vector to every row</strong>. PyTorch <code>nn.Linear</code>: <code>y = xAᵀ + b</code>.</li>
+</ul>
+<h3>4. Update (the learning) — the gradient</h3>
+<p>The hand-coded backward pass (optional §1) is the clearest:
+- <code>db2 = dp.sum(axis=0)</code> and <code>db1 = dz1.sum(axis=0)</code> — <strong>the bias gradient is the <em>sum</em> of the upstream gradient over the batch</strong>, because <code>∂z/∂b = 1</code> (so <code>∂L/∂b = Σ ∂L/∂z</code>). The weight gradient <code>dW = X.T @ dz</code> multiplies the inputs back in; bias does not.
+- Update: <code>b1 -= lr * db1</code>. In PyTorch this is automatic — <code>bias</code> is in <code>model.parameters()</code>, so <code>loss.backward()</code> fills <code>bias.grad</code> and <code>optimizer.step()</code> applies it (SGD: <code>b ← b − lr·db</code>; Adam: same gradient, per-parameter adaptive step).</p>
+<h3>5. Counting</h3>
+<ul>
+<li>PyTorch <code>sum(p.numel() for p in model.parameters())</code> ✅ counts weights <strong>and</strong> biases.</li>
+<li>sklearn <code>sum(c.size for c in coefs_)</code> ❌ counts weights only — biases are in <code>intercepts_</code>.</li>
+</ul>
+<h3>6. One-line summary per regime</h3>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>scikit-learn</th>
+<th>PyTorch <code>nn.Linear</code></th>
+<th>NumPy from scratch</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>define</td>
+<td>automatic</td>
+<td>automatic (<code>bias=True</code>)</td>
+<td><code>b = np.zeros(...)</code></td>
+</tr>
+<tr>
+<td>init value</td>
+<td>internal</td>
+<td><code>U(−√k,√k)</code>, <code>k=1/in_features</code></td>
+<td><code>0</code></td>
+</tr>
+<tr>
+<td>forward</td>
+<td>internal</td>
+<td><code>y = xAᵀ + b</code></td>
+<td><code>z = X@W + b</code> (broadcast)</td>
+</tr>
+<tr>
+<td>gradient</td>
+<td>internal</td>
+<td>autograd</td>
+<td><code>db = dz.sum(axis=0)</code></td>
+</tr>
+<tr>
+<td>update</td>
+<td>internal solver</td>
+<td><code>optimizer.step()</code></td>
+<td><code>b -= lr*db</code></td>
+</tr>
+<tr>
+<td>count</td>
+<td><code>intercepts_</code>/<code>intercept_</code></td>
+<td>in <code>model.parameters()</code></td>
+<td>you track it</td>
+</tr>
+</tbody>
+</table></section>
+<section id="s3"><h2>3 · What to take care of — and the correct fixes</h2><p>Functionally the bias handling is <strong>sound</strong> — the forward <code>+ b</code>, the gradient <code>db = dz.sum</code>, and the optimiser updates are all correct. The items below are <strong>one mislabelled number</strong> and <strong>three best-practice tighten-ups</strong>.</p>
+<h3>#1 — Incorrect: parameter count omits biases (nb02)</h3>
+<p>The sklearn-MLP cell prints <code>sum(c.size for c in model.coefs_)</code> = <strong>816</strong>, labelled "# parameters". <code>coefs_</code> is <strong>weights only</strong>; the true count for <code>32→16</code> is <strong>865</strong> (816 weights + 49 biases). Cosmetic (a diagnostic print), but mislabelled.</p>
+<pre><code class="language-python">n_weights = sum(c.size for c in model.coefs_)        # 816
+n_biases  = sum(b.size for b in model.intercepts_)   # 49
+print(f&quot;# parameters: {n_weights + n_biases:,}&quot;)     # 865
+</code></pre>
+<h3>#2 — Take care: weight_decay also decays biases (nb04, Extension 4)</h3>
+<p><code>optim.Adam(m.parameters(), lr=lr, weight_decay=wd)</code> applies the L2 penalty to <strong>every</strong> parameter, <strong>including biases</strong> (the Adam docs expose one scalar; excluding bias needs param groups). Decaying a bias pulls the model off the data's true baseline. Production-correct:</p>
+<pre><code class="language-python">decay    = [p for n, p in m.named_parameters() if p.ndim &gt; 1]   # weight matrices
+no_decay = [p for n, p in m.named_parameters() if p.ndim &lt;= 1]  # biases + norm params
+opt = optim.Adam(
+    [{&quot;params&quot;: decay, &quot;weight_decay&quot;: wd},
+     {&quot;params&quot;: no_decay, &quot;weight_decay&quot;: 0.0}],
+    lr=lr,
+)
+</code></pre>
+<h3>#3 — Take care: redundant bias before BatchNorm (optional §4)</h3>
+<p><code>MLPWithRegularisation</code> puts <code>nn.Linear(n_features, hidden)</code> straight before <code>nn.BatchNorm1d(hidden)</code> with <code>bias=True</code>. BatchNorm subtracts the mean (erasing the bias) and re-adds its own shift <code>β</code>, so the Linear bias is dead weight. Fix:</p>
+<pre><code class="language-python">layers = [nn.Linear(n_features, hidden, bias=not use_bn)]   # bias=False when BatchNorm follows
+if use_bn:
+    layers.append(nn.BatchNorm1d(hidden))
+</code></pre>
+<h3>#4 — Opportunity: seed the output bias on imbalanced data</h3>
+<p>Every PyTorch model starts the output bias near zero. The output bias <em>is</em> the prior log-odds, so on a skewed target, initialising it to the base rate starts the model at the prior instead of discovering it:</p>
+<pre><code class="language-python">import math
+p = float(y_tr.mean())                       # base rate
+with torch.no_grad():
+    model.layers[-1].bias.fill_(math.log(p / (1 - p)))
+</code></pre>
+<h3>#5 — Minor: bias lives on the model's device</h3>
+<p><code>model.to(device)</code> moves bias tensors too. Always move the <strong>whole model</strong>, never individual tensors, or you risk a device-mismatch error between weights and biases.</p></section>
+<section id="s4"><h2>References (official)</h2><ul>
+<li>PyTorch <strong><code>nn.Linear</code></strong> — <code>bias</code> default <code>True</code>, init <code>U(−√k,√k)</code> with <code>k=1/in_features</code>, formula <code>y=xAᵀ+b</code>, bias shape <code>(out_features,)</code>: <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html">docs.pytorch.org/.../torch.nn.Linear</a></li>
+<li>PyTorch <strong><code>torch.optim.Adam</code></strong> — <code>weight_decay</code> is one scalar over the whole group: <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html">.../torch.optim.Adam</a></li>
+<li>PyTorch <strong><code>torch.nn.init.zeros_</code></strong>: <a href="https://docs.pytorch.org/docs/stable/nn.init.html">.../nn.init</a></li>
+<li>scikit-learn <strong><code>MLPClassifier</code></strong> — biases in <code>intercepts_</code>: <a href="https://scikit-learn.org/stable/modules/generated/sklearn.neural_network.MLPClassifier.html">scikit-learn.org/.../MLPClassifier</a></li>
+<li>scikit-learn <strong><code>LogisticRegression</code></strong> — <code>fit_intercept</code> / <code>intercept_</code>: <a href="https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html">.../LogisticRegression</a></li>
+<li>Stanford <strong>CS231n</strong> — neuron model &amp; the bias term: <a href="https://cs231n.github.io/neural-networks-1/">cs231n.github.io/neural-networks-1</a></li>
+</ul></section>
+</main></div></body></html>
